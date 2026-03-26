@@ -7,7 +7,7 @@ name = "kimodo"
 version = "1.0.0"
 description = "Kimodo motion generation model"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
 dependencies = [
   "hydra-core>=1.3",
@@ -48,6 +48,7 @@ all = [
 kimodo_gen = "kimodo.scripts.generate:main"
 kimodo_demo = "kimodo.demo:main"
 kimodo_textencoder = "kimodo.scripts.run_text_encoder_server:main"
+kimodo_deploy_g1 = "kimodo.deploy.run_g1:main"
 
 [tool.setuptools]
 include-package-data = true

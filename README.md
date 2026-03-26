@@ -85,7 +85,7 @@ The web-based interactive demo provides an intuitive interface for generating mo
 
 **[CLI Documentation and Examples](https://research.nvidia.com/labs/sil/projects/kimodo/docs/user_guide/cli.html)**
 
-Motions can also be generated directly from the command line with the `kimodo_gen` command or by running `python -m kimodo.scripts.generate` directly.
+Motions can also be generated directly from the command line with the `kimodo_gen` command or by running `python -m kimodo.scripts.generate` directly. Other CLI entry points include `kimodo_demo` (interactive demo), `kimodo_textencoder` (text encoder server), and `kimodo_deploy_g1` (deploy to a physical Unitree G1 robot — see [Deploying to Unitree G1 Robot](#deploying-to-unitree-g1-robot)).
 
 **Key Arguments:**
 - `prompt`: A single text description or sequence of texts for the desired motion (required)
@@ -159,6 +159,60 @@ GMR supports the AMASS NPZ format out of the box, so simply generate motions wit
 python scripts/smplx_to_robot.py --smplx_file /path/to/saved/amass_format.npz --robot booster_t1
 ```
 
+## Deploying to Unitree G1 Robot
+
+The `kimodo/deploy/` module enables deploying Kimodo-generated motions directly to a physical Unitree G1 robot at 500 Hz via `unitree_sdk2py` LowCmd PD control.
+
+### Architecture
+
+Two threads run concurrently:
+- **Generator thread** (`generator.py`): runs Kimodo inference in the background and pushes `(T, 29)` joint arrays into a thread-safe `MotionBuffer`
+- **Controller thread** (`controller.py`): drains the buffer at 500 Hz, linearly interpolates between 30 fps keyframes, passes commands through a `SafetyLayer` (velocity clamp, kp ramp-up, watchdog), and publishes `LowCmd` via `unitree_sdk2py`
+
+### Hardware Requirements
+
+- **Jetson AGX Orin** (or equivalent) connected to the G1 via Ethernet
+- **Separate GPU server** (RTX 3090 / 4090 / A100) running `kimodo_textencoder` — the text encoder runs remotely via API so the Jetson does not need a large GPU
+- `unitree_sdk2py` installed on the Jetson
+
+### Setup
+
+**1. Start the text encoder server on the GPU machine:**
+```
+kimodo_textencoder
+```
+
+**2. Run on the robot (from the Jetson):**
+```
+kimodo_deploy_g1 --server-ip <gpu-server-ip> --network-interface eth0
+```
+
+**3. Dry-run (no robot hardware needed):**
+```
+kimodo_deploy_g1 --dry-run
+```
+
+### Key Flags
+
+| Flag | Description |
+|:-----|:------------|
+| `--server-ip` | IP of the GPU server running `kimodo_textencoder` |
+| `--network-interface` | Network interface connected to the G1 (e.g. `eth0`) |
+| `--ramp-duration` | Duration (s) for kp ramp-up at startup (default: 3 s) |
+| `--blend-duration` | Duration (s) for cosine-blend between motion segments |
+| `--diffusion-steps` | Number of diffusion denoising steps |
+| `--duration` | Duration (s) of each generated motion segment |
+| `--dry-run` | Print joint values without connecting to the robot |
+
+### Safety
+
+> **Always test with `--dry-run` before connecting to physical hardware.**
+
+- Joint kp ramps up linearly over `--ramp-duration` (default 3 s) at startup to prevent sudden movements
+- Velocity limits are clamped per joint at all times
+- A watchdog timer triggers an E-stop if the generator thread stalls
+- Press **Ctrl+C** at any time to trigger an immediate E-stop
+
 ## Timeline Annotations for BONES-SEED
 
 As detailed in the [tech report](https://research.nvidia.com/labs/sil/projects/kimodo/assets/kimodo_tech_report.pdf), Kimodo is trained using fine-grained temporal text annotations of mocap clips.
@@ -204,6 +258,6 @@ This project builds upon excellent open-source projects:
 
 ## Contact
 
-For questions or issues, plese open an issue on this repository or reach out directly to the authors.
+For questions or issues, please open an issue on this repository or reach out directly to the authors.
 
 ---
